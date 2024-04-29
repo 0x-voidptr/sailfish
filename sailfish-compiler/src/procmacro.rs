@@ -352,7 +352,7 @@ fn derive_template_impl(tokens: TokenStream) -> Result<TokenStream, syn::Error> 
     // render_once method always results in the same code.
     // This method can be implemented in `sailfish` crate, but I found that performance
     // drops when the implementation is written in `sailfish` crate.
-    let tokens = quote! {
+    let mut tokens = quote! {
         impl #impl_generics sailfish::TemplateOnce for #name #ty_generics #where_clause {
             fn render_once(self) -> sailfish::RenderResult {
                 use sailfish::runtime::{Buffer, SizeHint};
@@ -379,6 +379,17 @@ fn derive_template_impl(tokens: TokenStream) -> Result<TokenStream, syn::Error> 
 
         impl #impl_generics sailfish::private::Sealed for #name #ty_generics #where_clause {}
     };
+    #[cfg(feature = "axum")]
+    tokens.extend(quote! {
+        impl #impl_generics axum::response::IntoResponse for #name #ty_generics #where_clause {
+            fn into_response(self) -> axum::http::response::Response<axum::body::Body> {
+                match self.render_once() {
+                    Ok(b) => axum::response::Html(b).into_response(),
+                    Err(e) => axum::http::StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
+        }
+    });
 
     Ok(tokens)
 }
